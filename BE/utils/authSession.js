@@ -4,6 +4,7 @@ const db = require('../config/db');
 
 const ACCESS_COOKIE = process.env.AUTH_ACCESS_COOKIE_NAME || 'vdcms_access';
 const REFRESH_COOKIE = process.env.AUTH_REFRESH_COOKIE_NAME || 'vdcms_refresh';
+const CSRF_COOKIE = process.env.AUTH_CSRF_COOKIE_NAME || 'vdcms_csrf';
 const ACCESS_TTL_SECONDS = Math.max(300, Number(process.env.AUTH_ACCESS_TTL_SECONDS || 900));
 const REFRESH_TTL_SECONDS = Math.max(3600, Number(process.env.AUTH_REFRESH_TTL_SECONDS || 604800));
 const JWT_ISSUER = 'vdcms';
@@ -43,12 +44,34 @@ const extractRefreshToken = (request) => {
     return cookies[REFRESH_COOKIE] || null;
 };
 
+const cookieSecure = () => {
+    if (process.env.AUTH_COOKIE_SECURE === 'true') return true;
+    if (process.env.AUTH_COOKIE_SECURE === 'false') return false;
+    return process.env.NODE_ENV === 'production';
+};
+
+const cookieSameSite = () => {
+    const value = String(process.env.AUTH_COOKIE_SAMESITE || 'lax').toLowerCase();
+    return ['strict', 'lax', 'none'].includes(value) ? value : 'lax';
+};
+
 const baseCookieOptions = () => ({
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
+    secure: cookieSecure(),
+    sameSite: cookieSameSite(),
     priority: 'high',
 });
+
+const createCsrfToken = () => crypto.randomBytes(32).toString('hex');
+
+const setCsrfCookie = (res) => {
+    res.cookie(CSRF_COOKIE, createCsrfToken(), {
+        ...baseCookieOptions(),
+        httpOnly: false,
+        path: '/',
+        maxAge: REFRESH_TTL_SECONDS * 1000,
+    });
+};
 
 const setAuthCookies = (res, accessToken, refreshToken) => {
     res.cookie(ACCESS_COOKIE, accessToken, {
@@ -61,11 +84,13 @@ const setAuthCookies = (res, accessToken, refreshToken) => {
         path: '/api/auth',
         maxAge: REFRESH_TTL_SECONDS * 1000,
     });
+    setCsrfCookie(res);
 };
 
 const clearAuthCookies = (res) => {
     res.clearCookie(ACCESS_COOKIE, { ...baseCookieOptions(), path: '/' });
     res.clearCookie(REFRESH_COOKIE, { ...baseCookieOptions(), path: '/api/auth' });
+    res.clearCookie(CSRF_COOKIE, { ...baseCookieOptions(), httpOnly: false, path: '/' });
 };
 
 const signAccessToken = (user) => jwt.sign(
@@ -225,9 +250,12 @@ const revokeUserSessions = async (userId, executor = db) => {
 module.exports = {
     ACCESS_COOKIE,
     REFRESH_COOKIE,
+    CSRF_COOKIE,
     JWT_ISSUER,
     JWT_AUDIENCE,
+    parseCookies,
     extractAccessToken,
+    setCsrfCookie,
     clearAuthCookies,
     createAuthSession,
     rotateAuthSession,

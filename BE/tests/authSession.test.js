@@ -95,6 +95,7 @@ require.cache[dbPath] = {
 const {
     ACCESS_COOKIE,
     REFRESH_COOKIE,
+    CSRF_COOKIE,
     createAuthSession,
     extractAccessToken,
     rotateAuthSession,
@@ -120,11 +121,15 @@ test('login session stores JWTs only in HttpOnly SameSite cookies', async () => 
 
     const access = response.values.get(ACCESS_COOKIE);
     const refresh = response.values.get(REFRESH_COOKIE);
+    const csrf = response.values.get(CSRF_COOKIE);
     assert.equal(access.options.httpOnly, true);
     assert.equal(access.options.sameSite, 'lax');
     assert.equal(access.options.path, '/');
     assert.equal(refresh.options.httpOnly, true);
     assert.equal(refresh.options.path, '/api/auth');
+    assert.equal(csrf.options.httpOnly, false);
+    assert.equal(csrf.options.path, '/');
+    assert.match(csrf.value, /^[a-f0-9]{64}$/);
     assert.equal(sessions.length, 1);
 
     const accessPayload = jwt.verify(access.value, process.env.JWT_SECRET, {

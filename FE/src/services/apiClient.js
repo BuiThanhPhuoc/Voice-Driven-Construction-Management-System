@@ -3,6 +3,18 @@ export const BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:5000/
 
 let refreshPromise = null;
 
+const CSRF_COOKIE = import.meta.env.VITE_CSRF_COOKIE_NAME || 'vdcms_csrf';
+const UNSAFE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+
+const getCookie = (name) => {
+    if (typeof document === 'undefined') return '';
+    return document.cookie
+        .split(';')
+        .map((part) => part.trim())
+        .find((part) => part.startsWith(`${name}=`))
+        ?.slice(name.length + 1) || '';
+};
+
 const parseResponse = async (response) => {
     const contentType = response.headers.get('content-type') || '';
     if (contentType.includes('application/json')) {
@@ -21,10 +33,14 @@ const parseResponse = async (response) => {
 
 const requestRefresh = async () => {
     if (!refreshPromise) {
+        const csrfToken = getCookie(CSRF_COOKIE);
         refreshPromise = fetch(`${BASE_URL}/auth/refresh`, {
             method: 'POST',
             credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                ...(csrfToken ? { 'X-CSRF-Token': decodeURIComponent(csrfToken) } : {}),
+            },
         })
             .then(async (response) => ({ response, data: await parseResponse(response) }))
             .finally(() => {
@@ -45,8 +61,11 @@ export const refreshAuthSession = async () => {
 
 const makeRequest = async (endpoint, options = {}, allowRefresh = true) => {
     const isFormData = options.body instanceof FormData;
+    const method = String(options.method || 'GET').toUpperCase();
+    const csrfToken = UNSAFE_METHODS.has(method) ? getCookie(CSRF_COOKIE) : '';
     const headers = {
         ...(!isFormData && options.body ? { 'Content-Type': 'application/json' } : {}),
+        ...(csrfToken ? { 'X-CSRF-Token': decodeURIComponent(csrfToken) } : {}),
         ...options.headers,
     };
     const response = await fetch(`${BASE_URL}${endpoint}`, {

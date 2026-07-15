@@ -16,6 +16,7 @@ const {
     rotateAuthSession,
     revokeRequestSession,
     revokeUserSessions,
+    setCsrfCookie,
 } = require('../utils/authSession');
 
 const appUrl = () => (process.env.APP_URL || 'http://localhost:5173').replace(/\/$/, '');
@@ -165,6 +166,7 @@ exports.me = async (req, res) => {
             clearAuthCookies(res);
             return res.status(401).json({ success: false, message: 'Phiên đăng nhập không còn hợp lệ.' });
         }
+        setCsrfCookie(res);
         return res.json({ success: true, user: users[0] });
     } catch (error) {
         return respondServerError(res, error);

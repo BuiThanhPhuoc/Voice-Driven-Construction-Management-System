@@ -25,6 +25,7 @@ const bootstrapAdmin = require('./config/bootstrapAdmin');
 
 const initSocket = require('./socket');
 const { corsOptions } = require('./config/security');
+const csrfProtection = require('./middlewares/csrfMiddleware');
 
 const authRouter = require('./routers/authRouter');
 
@@ -77,6 +78,7 @@ app.use(helmet({
 app.use(cors(corsOptions));
 
 app.use(express.json({ limit: '100kb' }));
+app.use('/api', csrfProtection);
 
 app.get('/health', async (_req, res) => {
     try {
